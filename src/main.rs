@@ -57,7 +57,7 @@ async fn chat_completions_bench(
         decode_count.fetch_add(decode_tokens, Ordering::Relaxed);
     }
 
-    println!("avg time to decode one token use: {:?}", last.elapsed().as_millis() as u64 / session_tokens);
+    println!("avg time to decode one token use: {:?}ms", last.elapsed().as_millis() as u64 / session_tokens);
     Ok(())
 }
 
