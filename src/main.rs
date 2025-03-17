@@ -9,6 +9,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokenizers::Tokenizer;
+use tokio::time::Instant;
 
 async fn chat_completions_bench(
     client: &Client<OpenAIConfig>,
@@ -17,6 +18,11 @@ async fn chat_completions_bench(
     prefill_count: &AtomicU64,
     decode_count: &AtomicU64,
 ) -> Result<()> {
+    let mut is_update_prefill = true;
+    let mut skip_first_decode_latency = true;
+    let mut last = Instant::now();
+    let mut avg_latency = None;
+
     let req = CreateChatCompletionRequestArgs::default()
         .messages(vec![ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage::from(prompt.as_str()))])
         .max_tokens(65536u32)
@@ -26,16 +32,31 @@ async fn chat_completions_bench(
         .create_stream(req)
         .await?;
 
-    let mut is_update_prefill = false;
-
     while let Some(res) = stream.next().await {
-        if !is_update_prefill {
+        if is_update_prefill {
+            let now = Instant::now();
+            println!("prefill use: {:?}", now - last);
+            last = now;
+
             let enc = tokenizer.encode_fast(prompt.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
             prefill_count.fetch_add(enc.get_ids().len() as u64, Ordering::Relaxed);
-            is_update_prefill = true;
+
+            is_update_prefill = false;
         }
 
         let resp = res?;
+
+        if !skip_first_decode_latency {
+            let now = Instant::now();
+
+            if let Some(avg) = avg_latency {
+                avg_latency = Some((avg + (now - last)) / 2);
+            } else {
+                avg_latency = Some(now - last);
+            }
+        } else {
+            skip_first_decode_latency = false;
+        }
 
         for choice in resp.choices {
             let content = choice.delta.content.ok_or_else(|| anyhow!("no content"))?;
@@ -43,6 +64,11 @@ async fn chat_completions_bench(
             decode_count.fetch_add(enc.get_ids().len() as u64, Ordering::Relaxed);
         }
     }
+
+    if let Some(avg) = avg_latency {
+        println!("avg time to decode one token use: {:?}", avg);
+    }
+
     Ok(())
 }
 
