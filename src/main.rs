@@ -33,6 +33,8 @@ async fn chat_completions_bench(
         .await?;
 
     while let Some(res) = stream.next().await {
+        let resp = res?;
+
         if is_update_prefill {
             let now = Instant::now();
             println!("prefill use: {:?}", now - last);
@@ -44,8 +46,6 @@ async fn chat_completions_bench(
             is_update_prefill = false;
         }
 
-        let resp = res?;
-
         if !skip_first_decode_latency {
             let now = Instant::now();
 
@@ -54,6 +54,8 @@ async fn chat_completions_bench(
             } else {
                 avg_latency = Some(now - last);
             }
+
+            last = now;
         } else {
             skip_first_decode_latency = false;
         }
