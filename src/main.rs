@@ -53,6 +53,7 @@ struct Args {
     #[arg(short, long)]
     api_base: String,
 
+    /// HuggingFace repo, e.g. "Qwen/Qwen2.5-72B"
     #[arg(short, long)]
     model: String,
 
