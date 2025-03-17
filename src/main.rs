@@ -19,9 +19,8 @@ async fn chat_completions_bench(
     decode_count: &AtomicU64,
 ) -> Result<()> {
     let mut is_update_prefill = true;
-    let mut skip_first_decode_latency = true;
     let mut last = Instant::now();
-    let mut avg_latency = None;
+    let mut session_tokens = 0;
 
     let req = CreateChatCompletionRequestArgs::default()
         .messages(vec![ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage::from(prompt.as_str()))])
@@ -54,27 +53,11 @@ async fn chat_completions_bench(
             decode_tokens += enc.get_ids().len() as u64;
         }
 
+        session_tokens += decode_tokens;
         decode_count.fetch_add(decode_tokens, Ordering::Relaxed);
-
-        if !skip_first_decode_latency {
-            let now = Instant::now();
-
-            if let Some(avg) = avg_latency {
-                avg_latency = Some((avg + (now - last) / decode_tokens as u32) / 2);
-            } else {
-                avg_latency = Some((now - last) / decode_tokens as u32);
-            }
-
-            last = now;
-        } else {
-            skip_first_decode_latency = false;
-        }
     }
 
-    if let Some(avg) = avg_latency {
-        println!("avg time to decode one token use: {:?}", avg);
-    }
-
+    println!("avg time to decode one token use: {:?}", last.elapsed().as_millis() as u64 / session_tokens);
     Ok(())
 }
 
