@@ -46,24 +46,28 @@ async fn chat_completions_bench(
             is_update_prefill = false;
         }
 
+        let mut decode_tokens = 0;
+
+        for choice in resp.choices {
+            let content = choice.delta.content.ok_or_else(|| anyhow!("no content"))?;
+            let enc = tokenizer.encode_fast(content.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
+            decode_tokens += enc.get_ids().len() as u64;
+        }
+
+        decode_count.fetch_add(decode_tokens, Ordering::Relaxed);
+
         if !skip_first_decode_latency {
             let now = Instant::now();
 
             if let Some(avg) = avg_latency {
-                avg_latency = Some((avg + (now - last)) / 2);
+                avg_latency = Some((avg + (now - last) / decode_tokens as u32) / 2);
             } else {
-                avg_latency = Some(now - last);
+                avg_latency = Some((now - last) / decode_tokens as u32);
             }
 
             last = now;
         } else {
             skip_first_decode_latency = false;
-        }
-
-        for choice in resp.choices {
-            let content = choice.delta.content.ok_or_else(|| anyhow!("no content"))?;
-            let enc = tokenizer.encode_fast(content.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
-            decode_count.fetch_add(enc.get_ids().len() as u64, Ordering::Relaxed);
         }
     }
 
