@@ -5,9 +5,9 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-async-openai = {version = "0.28", default-features = false}
+async-openai = { default-features = false, git = "https://github.com/xutianyi1999/async-openai.git" }
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
-tokenizers = { version = "0.21", features = ["http", "rustls-tls"]}
-futures-util = { version = "0.3" , default-features = false }
+tokenizers = { version = "0.21", features = ["http", "rustls-tls"] }
+futures-util = { version = "0.3", default-features = false }
 serde_json = "1"
