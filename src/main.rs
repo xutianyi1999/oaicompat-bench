@@ -16,7 +16,9 @@ async fn chat_completions_bench(
     prompt: String,
     tokenizer: &Tokenizer,
     prefill_count: &AtomicU64,
+    prefill_latency: &AtomicU64,
     decode_count: &AtomicU64,
+    decode_latency: &AtomicU64,
 ) -> Result<()> {
     let mut is_update_prefill = true;
     let mut last = Instant::now();
@@ -36,7 +38,9 @@ async fn chat_completions_bench(
 
         if is_update_prefill {
             let now = Instant::now();
-            println!("prefill use: {:?}", now - last);
+            let elapsed = now - last;
+            prefill_latency.fetch_add(elapsed.as_millis() as u64, Ordering::Relaxed);
+            println!("prefill use: {:?}", elapsed);
             last = now;
 
             let enc = tokenizer.encode_fast(prompt.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
@@ -57,7 +61,9 @@ async fn chat_completions_bench(
         decode_count.fetch_add(decode_tokens, Ordering::Relaxed);
     }
 
-    println!("avg time to decode one token use: {:?}ms", last.elapsed().as_millis() as u64 / session_tokens);
+    let decode_elapsed = last.elapsed().as_millis() as u64;
+    decode_latency.fetch_add(decode_elapsed / session_tokens, Ordering::Relaxed);
+    println!("avg time to decode one token use: {:?}ms", decode_elapsed / session_tokens);
     Ok(())
 }
 
@@ -110,7 +116,8 @@ fn load_datasets(dataset_path: &str) -> Result<Vec<String>> {
 fn exec(args: Args) -> Result<()> {
     let tokenizer = Tokenizer::from_pretrained(args.model, None).map_err(|e| anyhow!(e.to_string()))?;
     let prompts: Vec<String> = load_datasets(args.dataset_path.as_str())?;
-    println!("load {} prompts", prompts.len());
+    let prompts_len = prompts.len();
+    println!("load {} prompts", prompts_len);
 
     let rt = tokio::runtime::Runtime::new()?;
 
@@ -123,7 +130,9 @@ fn exec(args: Args) -> Result<()> {
         let client = Arc::new(client);
 
         let prefill_count = Arc::new(AtomicU64::new(0));
+        let prefill_latency = Arc::new(AtomicU64::new(0));
         let decode_count = Arc::new(AtomicU64::new(0));
+        let decode_latency = Arc::new(AtomicU64::new(0));
 
         let sem = tokio::sync::Semaphore::new(args.parallel_task);
         let sem = Arc::new(sem);
@@ -133,7 +142,9 @@ fn exec(args: Args) -> Result<()> {
             let tokenizer = tokenizer.clone();
             let client = client.clone();
             let prefill_count = prefill_count.clone();
+            let prefill_latency = prefill_latency.clone();
             let decode_count = decode_count.clone();
+            let decode_latency = decode_latency.clone();
             let sem = sem.clone();
 
             let fut = async {
@@ -145,7 +156,9 @@ fn exec(args: Args) -> Result<()> {
                         prompt,
                         &tokenizer,
                         &prefill_count,
-                        &decode_count
+                        &prefill_latency,
+                        &decode_count,
+                        &decode_latency,
                     ).await
                 }).await??;
 
@@ -202,7 +215,10 @@ fn exec(args: Args) -> Result<()> {
         }
 
         let secs = t.elapsed().as_secs();
-        println!("global prefill: {} tokens/s, global decode: {} tokens/s", total_prefill / secs, total_decode / secs);
+        println!();
+        println!("===============================================");
+        println!("global prefill: {} tokens/s, global decode: {} tokens/s", total_prefill as f64 / secs as f64, total_decode as f64 / secs as f64);
+        println!("global prefill latency: {}ms, global decode latency: {} ms", prefill_latency.load(Ordering::Relaxed) / prompts_len as u64, decode_latency.load(Ordering::Relaxed) / prompts_len as u64);
 
         Ok(())
     })
