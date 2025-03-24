@@ -12,3 +12,4 @@ tokenizers = { version = "0.21", features = ["http", "rustls-tls"] }
 futures-util = { version = "0.3", default-features = false }
 csv = "1"
 glob = "0.3"
+rand = "0.9"

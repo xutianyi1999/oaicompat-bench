@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokenizers::Tokenizer;
+use tokio::io::AsyncWriteExt;
 use tokio::signal;
 use tokio::time::Instant;
 
@@ -20,6 +21,13 @@ async fn chat_completions_bench(
     decode_count: &AtomicU64,
     decode_latency: &AtomicU64,
 ) -> Result<()> {
+    let task_id: u64 = rand::random();
+
+    let out = tokio::fs::File::create(format!("out/{}.txt", task_id)).await?;
+    let mut out = tokio::io::BufWriter::new(out);
+    out.write_all(prompt.as_bytes()).await?;
+    out.write_all(b"\n\n").await?;
+
     let mut is_update_prefill = true;
     let mut last = Instant::now();
     let mut session_tokens = 0;
@@ -53,6 +61,8 @@ async fn chat_completions_bench(
 
         for choice in resp.choices {
             let content = choice.delta.content.ok_or_else(|| anyhow!("no content"))?;
+            out.write_all(content.as_bytes()).await?;
+
             let enc = tokenizer.encode_fast(content.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
             decode_tokens += enc.get_ids().len() as u64;
         }
@@ -64,6 +74,8 @@ async fn chat_completions_bench(
     let decode_elapsed = last.elapsed().as_millis() as u64;
     decode_latency.fetch_add(decode_elapsed / session_tokens, Ordering::Relaxed);
     println!("avg time to decode one token use: {:?}ms", decode_elapsed / session_tokens);
+
+    out.flush().await?;
     Ok(())
 }
 
@@ -99,7 +111,7 @@ fn load_datasets(dataset_path: &str) -> Result<Vec<String>> {
             record_iter.next();
 
             let question = format!(
-                "回答问题并且原因: {}, A: {}, B: {}, C: {}, D: {}",
+                "回答问题并且解释原因: {}, A: {}, B: {}, C: {}, D: {}",
                 record_iter.next().unwrap(),
                 record_iter.next().unwrap(),
                 record_iter.next().unwrap(),
@@ -222,8 +234,9 @@ fn exec(args: Args) -> Result<()> {
         let secs = t.elapsed().as_secs();
         println!();
         println!("===============================================");
+        println!("used {}/{} dataset", finished_tasks.load(Ordering::Relaxed), prompts_len);
         println!("global prefill: {:.2} tokens/s, global decode: {:.2} tokens/s", total_prefill as f64 / secs as f64, total_decode as f64 / secs as f64);
-        println!("global prefill latency: {:.2}ms, global decode latency: {:.2} ms", prefill_latency.load(Ordering::Relaxed) as f64 / finished_tasks.load(Ordering::Relaxed) as f64, decode_latency.load(Ordering::Relaxed) as f64 / finished_tasks.load(Ordering::Relaxed) as f64);
+        println!("global prefill latency: {:.2}ms, global decode latency: {:.2}ms", prefill_latency.load(Ordering::Relaxed) as f64 / finished_tasks.load(Ordering::Relaxed) as f64, decode_latency.load(Ordering::Relaxed) as f64 / finished_tasks.load(Ordering::Relaxed) as f64);
 
         Ok(())
     })
