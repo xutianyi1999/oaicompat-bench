@@ -217,8 +217,8 @@ fn exec(args: Args) -> Result<()> {
         let secs = t.elapsed().as_secs();
         println!();
         println!("===============================================");
-        println!("global prefill: {} tokens/s, global decode: {} tokens/s", total_prefill as f64 / secs as f64, total_decode as f64 / secs as f64);
-        println!("global prefill latency: {}ms, global decode latency: {} ms", prefill_latency.load(Ordering::Relaxed) / prompts_len as u64, decode_latency.load(Ordering::Relaxed) / prompts_len as u64);
+        println!("global prefill: {:.2} tokens/s, global decode: {:.2} tokens/s", total_prefill as f64 / secs as f64, total_decode as f64 / secs as f64);
+        println!("global prefill latency: {:.2}ms, global decode latency: {:.2} ms", prefill_latency.load(Ordering::Relaxed) as f64 / prompts_len as f64, decode_latency.load(Ordering::Relaxed) as f64 / prompts_len as f64);
 
         Ok(())
     })
