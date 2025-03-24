@@ -133,6 +133,7 @@ fn exec(args: Args) -> Result<()> {
         let prefill_latency = Arc::new(AtomicU64::new(0));
         let decode_count = Arc::new(AtomicU64::new(0));
         let decode_latency = Arc::new(AtomicU64::new(0));
+        let finished_tasks = Arc::new(AtomicU64::new(0));
 
         let sem = tokio::sync::Semaphore::new(args.parallel_task);
         let sem = Arc::new(sem);
@@ -151,7 +152,7 @@ fn exec(args: Args) -> Result<()> {
                 tokio::spawn(async move {
                     let _guard = sem.acquire().await?;
 
-                    chat_completions_bench(
+                    let res = chat_completions_bench(
                         &client,
                         prompt,
                         &tokenizer,
@@ -159,7 +160,10 @@ fn exec(args: Args) -> Result<()> {
                         &prefill_latency,
                         &decode_count,
                         &decode_latency,
-                    ).await
+                    ).await;
+
+                    finished_tasks.fetch_add(1, Ordering::Relaxed);
+                    res
                 }).await??;
 
                 Result::<(), anyhow::Error>::Ok(())
@@ -218,7 +222,7 @@ fn exec(args: Args) -> Result<()> {
         println!();
         println!("===============================================");
         println!("global prefill: {:.2} tokens/s, global decode: {:.2} tokens/s", total_prefill as f64 / secs as f64, total_decode as f64 / secs as f64);
-        println!("global prefill latency: {:.2}ms, global decode latency: {:.2} ms", prefill_latency.load(Ordering::Relaxed) as f64 / prompts_len as f64, decode_latency.load(Ordering::Relaxed) as f64 / prompts_len as f64);
+        println!("global prefill latency: {:.2}ms, global decode latency: {:.2} ms", prefill_latency.load(Ordering::Relaxed) as f64 / finished_tasks.load(Ordering::Relaxed) as f64, decode_latency.load(Ordering::Relaxed) as f64 / finished_tasks.load(Ordering::Relaxed) as f64);
 
         Ok(())
     })
