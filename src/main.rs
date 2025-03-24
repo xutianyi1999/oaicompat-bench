@@ -146,6 +146,7 @@ fn exec(args: Args) -> Result<()> {
             let prefill_latency = prefill_latency.clone();
             let decode_count = decode_count.clone();
             let decode_latency = decode_latency.clone();
+            let finished_tasks = finished_tasks.clone();
             let sem = sem.clone();
 
             let fut = async {
