@@ -22,7 +22,6 @@ async fn chat_completions_bench(
     decode_latency: &AtomicU64,
 ) -> Result<()> {
     let task_id: u64 = rand::random();
-
     let out = tokio::fs::File::create(format!("out/{}.txt", task_id)).await?;
     let mut out = tokio::io::BufWriter::new(out);
     out.write_all(prompt.as_bytes()).await?;
@@ -130,6 +129,9 @@ fn exec(args: Args) -> Result<()> {
     let prompts: Vec<String> = load_datasets(args.dataset_path.as_str())?;
     let prompts_len = prompts.len();
     println!("load {} prompts", prompts_len);
+
+    std::fs::remove_dir_all("out")?;
+    std::fs::create_dir("out")?;
 
     let rt = tokio::runtime::Runtime::new()?;
 
