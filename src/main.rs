@@ -74,7 +74,7 @@ async fn chat_completions_bench(
     decode_latency.fetch_add(decode_elapsed / session_tokens, Ordering::Relaxed);
     println!("avg time to decode one token use: {:?}ms", decode_elapsed / session_tokens);
 
-    tokio::spawn(out.flush());
+    tokio::spawn(async move { let _ = out.flush().await; });
     Ok(())
 }
 
