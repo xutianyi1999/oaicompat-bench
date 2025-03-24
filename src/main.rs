@@ -8,6 +8,7 @@ use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokenizers::Tokenizer;
+use tokio::signal;
 use tokio::time::Instant;
 
 async fn chat_completions_bench(
@@ -153,18 +154,56 @@ fn exec(args: Args) -> Result<()> {
             futs.push(fut);
         }
 
-        tokio::spawn(async move{
+        let mut total_prefill = 0;
+        let mut total_decode = 0;
+        let t = Instant::now();
+
+        let fut = async {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
                 let prefill = prefill_count.swap(0, Ordering::Relaxed);
                 let decode = decode_count.swap(0, Ordering::Relaxed);
 
+                total_prefill += prefill;
+                total_decode += decode;
                 println!("prefill: {} tokens/s, decode: {} tokens/s", prefill, decode);
             }
-        });
+        };
 
-        futures_util::future::try_join_all(futs).await?;
+        #[cfg(windows)]
+        {
+            let mut ctrl_c = signal::windows::ctrl_c()?;
+            let mut ctrl_close = signal::windows::ctrl_close()?;
+
+            tokio::select! {
+                _ = ctrl_c.recv() => (),
+                _ = ctrl_close.recv() => (),
+                res = futures_util::future::try_join_all(futs) => {
+                    res?;
+                },
+                _ = fut => ()
+            };
+        }
+
+        #[cfg(unix)]
+        {
+            let mut terminate = signal::unix::signal(signal::unix::SignalKind::terminate())?;
+            let mut interrupt = signal::unix::signal(signal::unix::SignalKind::interrupt())?;
+
+            tokio::select! {
+                _ = terminate.recv() => (),
+                _ = interrupt.recv() => (),
+                res = futures_util::future::try_join_all(futs) => {
+                    res?;
+                },
+                _ = fut => ()
+            };
+        }
+
+        let secs = t.elapsed().as_secs();
+        println!("global prefill: {} tokens/s, global decode: {} tokens/s", total_prefill / secs, total_decode / secs);
+
         Ok(())
     })
 }
