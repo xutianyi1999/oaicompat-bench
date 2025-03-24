@@ -1,7 +1,7 @@
 # oaicompat-bench
 
 ## run
-Prepare `dataset.json` before running, dataset https://github.com/ymcui/Chinese-LLaMA-Alpaca/wiki/C-Eval%E8%AF%84%E6%B5%8B%E7%BB%93%E6%9E%9C%E4%B8%8E%E8%84%9A%E6%9C%AC
+Prepare dataset before running, dataset https://github.com/ymcui/Chinese-LLaMA-Alpaca/wiki/C-Eval%E8%AF%84%E6%B5%8B%E7%BB%93%E6%9E%9C%E4%B8%8E%E8%84%9A%E6%9C%AC
 
 ```shell
 cargo run --release -- -a "http://127.0.0.1:30021/v1" -m Qwen/Qwen2.5-72B -d "/media/nvme/data/test/*.csv" -p 4
