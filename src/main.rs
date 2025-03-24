@@ -4,7 +4,6 @@ use async_openai::types::{ChatCompletionRequestMessage, ChatCompletionRequestUse
 use async_openai::Client;
 use clap::{arg, Parser};
 use futures_util::StreamExt;
-use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -73,12 +72,45 @@ struct Args {
     model: String,
 
     #[arg(short, long)]
-    dataset_json: PathBuf
+    dataset_path: String,
+
+    #[arg(short, long)]
+    parallel_task: usize
+}
+
+fn load_datasets(dataset_path: &str) -> Result<Vec<String>> {
+    let paths = glob::glob(dataset_path)?;
+    let mut questions = Vec::new();
+
+    for path in paths {
+        let path = path?;
+        let mut rdr = csv::Reader::from_path(path)?;
+
+        for res in rdr.records() {
+            let record = res?;
+            let mut record_iter = record.iter();
+            record_iter.next();
+
+            let question = format!(
+                "回答问题并且原因: {}, A: {}, B: {}, C: {}, D: {}",
+                record_iter.next().unwrap(),
+                record_iter.next().unwrap(),
+                record_iter.next().unwrap(),
+                record_iter.next().unwrap(),
+                record_iter.next().unwrap(),
+            );
+
+            questions.push(question);
+        }
+    }
+    Ok(questions)
 }
 
 fn exec(args: Args) -> Result<()> {
     let tokenizer = Tokenizer::from_pretrained(args.model, None).map_err(|e| anyhow!(e.to_string()))?;
-    let prompts: Vec<String> = serde_json::from_reader(std::fs::File::open(&args.dataset_json)?)?;
+    let prompts: Vec<String> = load_datasets(args.dataset_path.as_str())?;
+    println!("load {} prompts", prompts.len());
+
     let rt = tokio::runtime::Runtime::new()?;
 
     rt.block_on(async {
@@ -92,15 +124,21 @@ fn exec(args: Args) -> Result<()> {
         let prefill_count = Arc::new(AtomicU64::new(0));
         let decode_count = Arc::new(AtomicU64::new(0));
 
+        let sem = tokio::sync::Semaphore::new(args.parallel_task);
+        let sem = Arc::new(sem);
+
         let mut futs = Vec::new();
         for prompt in prompts {
             let tokenizer = tokenizer.clone();
             let client = client.clone();
             let prefill_count = prefill_count.clone();
             let decode_count = decode_count.clone();
+            let sem = sem.clone();
 
             let fut = async {
                 tokio::spawn(async move {
+                    let _guard = sem.acquire().await?;
+
                     chat_completions_bench(
                         &client,
                         prompt,
