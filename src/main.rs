@@ -59,11 +59,12 @@ async fn chat_completions_bench(
         let mut decode_tokens = 0;
 
         for choice in resp.choices {
-            let content = choice.delta.content.ok_or_else(|| anyhow!("no content"))?;
-            out.write_all(content.as_bytes()).await?;
+            if let Some(content) = choice.delta.content {
+                out.write_all(content.as_bytes()).await?;
 
-            let enc = tokenizer.encode_fast(content.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
-            decode_tokens += enc.get_ids().len() as u64;
+                let enc = tokenizer.encode_fast(content.as_str(), false).map_err(|e| anyhow!(e.to_string()))?;
+                decode_tokens += enc.get_ids().len() as u64;
+            }
         }
 
         session_tokens += decode_tokens;
