@@ -128,7 +128,7 @@ fn load_datasets(dataset_path: &str) -> Result<Vec<String>> {
 }
 
 fn exec(args: Args) -> Result<()> {
-    let tokenizer = Tokenizer::from_pretrained(args.model, None).map_err(|e| anyhow!(e.to_string()))?;
+    let tokenizer = Tokenizer::from_pretrained(args.model.clone(), None).map_err(|e| anyhow!(e.to_string()))?;
     let prompts: Vec<String> = load_datasets(args.dataset_path.as_str())?;
     let prompts_len = prompts.len();
     println!("load {} prompts", prompts_len);
@@ -165,6 +165,7 @@ fn exec(args: Args) -> Result<()> {
             let decode_latency = decode_latency.clone();
             let finished_tasks = finished_tasks.clone();
             let sem = sem.clone();
+            let model = args.model.clone();
 
             let fut = async {
                 tokio::spawn(async move {
@@ -178,7 +179,7 @@ fn exec(args: Args) -> Result<()> {
                         &prefill_latency,
                         &decode_count,
                         &decode_latency,
-                        args.model.as_str(),
+                        model.as_str(),
                     ).await;
 
                     finished_tasks.fetch_add(1, Ordering::Relaxed);
