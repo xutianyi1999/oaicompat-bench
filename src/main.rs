@@ -35,7 +35,7 @@ async fn chat_completions_bench(
     let req = CreateChatCompletionRequestArgs::default()
         .messages(vec![ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage::from(prompt.as_str()))])
         .max_tokens(65536u32)
-        .model(model)
+        .model(model.split("/").last().unwrap())
         .build()?;
 
     let mut stream = client.chat()
