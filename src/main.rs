@@ -20,6 +20,7 @@ async fn chat_completions_bench(
     prefill_latency: &AtomicU64,
     decode_count: &AtomicU64,
     decode_latency: &AtomicU64,
+    model: &str,
 ) -> Result<()> {
     let task_id: u64 = rand::random();
     let out = tokio::fs::File::create(format!("answers/{}.txt", task_id)).await?;
@@ -34,6 +35,7 @@ async fn chat_completions_bench(
     let req = CreateChatCompletionRequestArgs::default()
         .messages(vec![ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage::from(prompt.as_str()))])
         .max_tokens(65536u32)
+        .model(model)
         .build()?;
 
     let mut stream = client.chat()
@@ -176,6 +178,7 @@ fn exec(args: Args) -> Result<()> {
                         &prefill_latency,
                         &decode_count,
                         &decode_latency,
+                        args.model.as_str(),
                     ).await;
 
                     finished_tasks.fetch_add(1, Ordering::Relaxed);
